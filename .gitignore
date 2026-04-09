@@ -1,0 +1,19 @@
+node_modules
+dist
+.data
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.env
+*.env.local
+
+# Dev tools - not for git
+screenshot.cjs
+screenshot-latest.png
+mc-live-dump.sql
+.htaccess
+.install-progress
+CORE-VS-PRO.md
+SAAS-PLAN.md
+SECURITY-ARCHITECTURE.md

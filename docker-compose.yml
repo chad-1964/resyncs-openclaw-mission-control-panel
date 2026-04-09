@@ -1,0 +1,110 @@
+version: "3.8"
+
+# ─────────────────────────────────────────────────────────────
+# Mission Control — Docker Compose Stack
+# MariaDB + Node.js App + Nginx Reverse Proxy + OpenClaw
+# ─────────────────────────────────────────────────────────────
+
+services:
+  # ── MariaDB 10.11 ────────────────────────────────────────
+  db:
+    image: mariadb:10.11
+    container_name: mc-mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-changeme_root}
+      MYSQL_DATABASE: ${DB_NAME:-mission_control}
+      MYSQL_USER: ${DB_USER:-mcadmin}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mariadb/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - mc-network
+
+  # ── Mission Control App (Node.js) ───────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mc-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-mission_control}
+      DB_USER: ${DB_USER:-mcadmin}
+      DB_PASSWORD: ${DB_PASSWORD:-changeme}
+      PORT: 5000
+    ports:
+      - "127.0.0.1:5000:5000"
+    networks:
+      - mc-network
+
+  # ── OpenClaw Agent Engine (placeholder) ─────────────────
+  # Uncomment and configure once OpenClaw is ready
+  # openclaw:
+  #   image: openclaw/engine:latest
+  #   container_name: mc-openclaw
+  #   restart: unless-stopped
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #   environment:
+  #     DATABASE_URL: mysql://mcadmin:${DB_PASSWORD:-changeme}@db:3306/${DB_NAME:-mission_control}
+  #     MISSION_CONTROL_URL: http://app:5000
+  #   ports:
+  #     - "127.0.0.1:8080:8080"
+  #   networks:
+  #     - mc-network
+
+  # ── Nginx Reverse Proxy ─────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: mc-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - certbot_data:/var/www/certbot:ro
+    networks:
+      - mc-network
+
+  # ── Certbot (Let's Encrypt SSL) ─────────────────────────
+  certbot:
+    image: certbot/certbot
+    container_name: mc-certbot
+    volumes:
+      - ./docker/nginx/ssl:/etc/letsencrypt
+      - certbot_data:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - mc-network
+
+volumes:
+  db_data:
+    driver: local
+  certbot_data:
+    driver: local
+
+networks:
+  mc-network:
+    driver: bridge

@@ -1,0 +1,14 @@
+{
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "{{TOKEN}}"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": "openrouter/auto"
+    }
+  }
+}
